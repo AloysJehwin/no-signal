@@ -1,7 +1,5 @@
-import SQLite, {SQLiteDatabase} from 'react-native-sqlite-storage';
+import * as SQLite from 'expo-sqlite';
 import {FaultTreeEntry} from './FaultTreeEntry';
-
-SQLite.enablePromise(true);
 
 const DB_NAME = 'fieldfix.db';
 
@@ -16,6 +14,15 @@ CREATE TABLE IF NOT EXISTS fault_tree (
 );
 `;
 
+interface Row {
+  fault_id: string;
+  equipment_type: string;
+  symptoms: string;
+  hypotheses: string;
+  safety_flags: string;
+  updated_at: string;
+}
+
 const tokenize = (s: string): string[] =>
   s
     .toLowerCase()
@@ -25,17 +32,17 @@ const tokenize = (s: string): string[] =>
 
 export class LocalRagStore {
   static readonly instance = new LocalRagStore();
-  private db: SQLiteDatabase | null = null;
+  private db: SQLite.SQLiteDatabase | null = null;
 
   async init(): Promise<void> {
     if (this.db) return;
-    this.db = await SQLite.openDatabase({name: DB_NAME, location: 'default'});
-    await this.db.executeSql(CREATE_SQL);
+    this.db = await SQLite.openDatabaseAsync(DB_NAME);
+    await this.db.execAsync(CREATE_SQL);
   }
 
   async upsertEntry(entry: FaultTreeEntry): Promise<void> {
     const db = this.require();
-    await db.executeSql(
+    await db.runAsync(
       `INSERT OR REPLACE INTO fault_tree
        (fault_id, equipment_type, symptoms, hypotheses, safety_flags, updated_at)
        VALUES (?, ?, ?, ?, ?, ?);`,
@@ -52,10 +59,8 @@ export class LocalRagStore {
 
   async all(): Promise<FaultTreeEntry[]> {
     const db = this.require();
-    const [rs] = await db.executeSql('SELECT * FROM fault_tree;');
-    const out: FaultTreeEntry[] = [];
-    for (let i = 0; i < rs.rows.length; i++) out.push(this.rowToEntry(rs.rows.item(i)));
-    return out;
+    const rows = await db.getAllAsync<Row>('SELECT * FROM fault_tree;');
+    return rows.map(r => this.rowToEntry(r));
   }
 
   async searchBySymptoms(symptoms: string[]): Promise<FaultTreeEntry[]> {
@@ -77,13 +82,12 @@ export class LocalRagStore {
     return hits;
   }
 
-  private require(): SQLiteDatabase {
+  private require(): SQLite.SQLiteDatabase {
     if (!this.db) throw new Error('LocalRagStore.init() not called');
     return this.db;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private rowToEntry(row: any): FaultTreeEntry {
+  private rowToEntry(row: Row): FaultTreeEntry {
     return {
       faultId: row.fault_id,
       equipmentType: row.equipment_type,
