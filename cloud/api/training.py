@@ -297,6 +297,38 @@ async def training_status(store: FleetKnowledgeStore = Depends(get_store)) -> di
         "entries_by_equipment": by_equipment,
         "lora_adapter_ready": len(entries) >= 10,  # concept threshold
         "gemini_api_configured": bool(_GEMINI_API_KEY),
+        "gemma_cloud_run_configured": bool(_GEMMA_CLOUD_RUN_URL),
+        "gemma_cloud_run_url": _GEMMA_CLOUD_RUN_URL or "(not set)",
+        "nosignal_cloud_run_url": _secrets.get("cloud_run_nosignal_url", "(not set)"),
+    }
+
+
+@router.post(
+    "/gemma-infer",
+    summary="Run inference against the Cloud-hosted Gemma 3 4B (GPU)",
+    description=(
+        "Sends a prompt directly to the **Gemma 3 4B** model running on Google Cloud Run "
+        "(NVIDIA L4 GPU). This is the same model the mobile device runs locally — useful "
+        "for testing prompts against the cloud-hosted twin before pushing them on-device, "
+        "and for generating training data in the retraining pipeline."
+    ),
+)
+async def gemma_infer(body: dict) -> dict:
+    prompt: str = body.get("prompt", "")
+    if not prompt:
+        raise HTTPException(status_code=422, detail="'prompt' field is required")
+    try:
+        response = await _gemma_generate(prompt)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("gemma-infer: call failed")
+        raise HTTPException(status_code=502, detail=f"Gemma Cloud Run error: {exc}") from exc
+    return {
+        "model": "gemma3:4b",
+        "endpoint": _GEMMA_CLOUD_RUN_URL,
+        "prompt": prompt,
+        "response": response,
     }
 
 
