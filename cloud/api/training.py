@@ -34,7 +34,8 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from cloud.fleet_store.store import FleetKnowledgeStore
-from cloud.schemas import FaultTreeEntry, Hypothesis, TrainingData, TrainingResponse
+from cloud.fleet_store.training_logs import GcsTrainingLogStore
+from cloud.schemas import FaultTreeEntry, Hypothesis, TrainingData, TrainingResponse, TrainingLog
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,9 @@ _GEMMA_CLOUD_RUN_URL: str = (
     or os.getenv("GEMMA_CLOUD_RUN_URL", "")
 )
 
+_GCS_LOG_BUCKET: str | None = _secrets.get("gcs_log_bucket")
+log_store = GcsTrainingLogStore(bucket_name=_GCS_LOG_BUCKET)
+
 
 router = APIRouter(
     prefix="/api/training",
@@ -88,42 +92,82 @@ def get_store() -> FleetKnowledgeStore:
 # Core helpers: call Gemini / Gemma and parse JSON
 # ──────────────────────────────────────────────────────────────────────────────
 
-async def _gemini_generate(prompt: str) -> str:
+async def _gemini_generate(prompt: str, endpoint_name: str = "unknown") -> str:
     """Call gemini-flash-latest and return the raw text response."""
     if not _GEMINI_API_KEY:
         raise HTTPException(
             status_code=503,
             detail="GEMINI_API_KEY not configured. Add it to cloud/secrets.json.",
         )
+    
+    error_msg = None
+    response_text = ""
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            _GEMINI_URL,
-            json=payload,
-            headers={"Content-Type": "application/json"},
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                _GEMINI_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        response_text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception as exc:
+        error_msg = str(exc)
+        raise
+    finally:
+        log = TrainingLog(
+            log_id=uuid.uuid4().hex[:8],
+            timestamp=datetime.now(timezone.utc),
+            endpoint=endpoint_name,
+            model_used="gemini-flash-latest",
+            prompt=prompt,
+            raw_response=response_text,
+            error=error_msg,
         )
-        resp.raise_for_status()
-        data = resp.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+        log_store.add_log(log)
+
+    return response_text
 
 
-async def _gemma_generate(prompt: str) -> str:
+async def _gemma_generate(prompt: str, endpoint_name: str = "unknown") -> str:
     """Call the Gemma 3 4B model on Cloud Run (Ollama-compatible endpoint)."""
     if not _GEMMA_CLOUD_RUN_URL:
         raise HTTPException(
             status_code=503,
             detail="GEMMA_CLOUD_RUN_URL not configured. Add it to cloud/secrets.json.",
         )
+    
+    error_msg = None
+    response_text = ""
     payload = {"model": "gemma3:4b", "prompt": prompt, "stream": False}
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(
-            f"{_GEMMA_CLOUD_RUN_URL}/api/generate",
-            json=payload,
-            headers={"Content-Type": "application/json"},
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                f"{_GEMMA_CLOUD_RUN_URL}/api/generate",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        response_text = data.get("response", "")
+    except Exception as exc:
+        error_msg = str(exc)
+        raise
+    finally:
+        log = TrainingLog(
+            log_id=uuid.uuid4().hex[:8],
+            timestamp=datetime.now(timezone.utc),
+            endpoint=endpoint_name,
+            model_used="gemma3:4b",
+            prompt=prompt,
+            raw_response=response_text,
+            error=error_msg,
         )
-        resp.raise_for_status()
-        data = resp.json()
-    return data.get("response", "")
+        log_store.add_log(log)
+
+    return response_text
 
 
 def _extract_json(text: str) -> str:
@@ -200,7 +244,7 @@ async def continuous_learn(
     logger.info("continuous-learn: query=%r equipment=%s", data.query, data.equipment_type)
 
     try:
-        raw = await _gemini_generate(prompt)
+        raw = await _gemini_generate(prompt, endpoint_name="/api/training/continuous-learn")
         parsed = json.loads(_extract_json(raw))
     except Exception as exc:
         logger.exception("continuous-learn: gemini call or parse failed")
@@ -250,7 +294,7 @@ async def ingest_offline_conversations(
         logger.info("offline-conversations: processing conversation for %s", equipment)
         prompt = _build_conversation_learning_prompt(conv)
         try:
-            raw = await _gemini_generate(prompt)
+            raw = await _gemini_generate(prompt, endpoint_name="/api/training/offline-conversations")
             parsed = json.loads(_extract_json(raw))
         except Exception:
             logger.exception("offline-conversations: failed for one conversation, skipping")
@@ -318,7 +362,7 @@ async def gemma_infer(body: dict) -> dict:
     if not prompt:
         raise HTTPException(status_code=422, detail="'prompt' field is required")
     try:
-        response = await _gemma_generate(prompt)
+        response = await _gemma_generate(prompt, endpoint_name="/api/training/gemma-infer")
     except HTTPException:
         raise
     except Exception as exc:
@@ -367,7 +411,7 @@ async def retrain_from_fleet(store: FleetKnowledgeStore = Depends(get_store)) ->
     )
 
     try:
-        raw = await _gemini_generate(prompt)
+        raw = await _gemini_generate(prompt, endpoint_name="/api/training/retrain-from-fleet")
         summary = json.loads(_extract_json(raw))
     except Exception as exc:
         logger.exception("retrain-from-fleet: failed")
@@ -378,3 +422,18 @@ async def retrain_from_fleet(store: FleetKnowledgeStore = Depends(get_store)) ->
         "entries_used": len(entries),
         "summary": summary,
     }
+
+
+@router.get(
+    "/logs",
+    summary="Retrieve detailed training logs from GCS",
+    description=(
+        "Fetches the raw LLM prompts and responses (training logs) directly from "
+        "the Google Cloud Storage bucket. This provides full visibility into exactly "
+        "what the models are being asked and how they are responding."
+    ),
+    response_model=list[TrainingLog],
+)
+async def get_training_logs(limit: int = 50) -> list[TrainingLog]:
+    """Return recent training logs from the GCS bucket."""
+    return log_store.list_logs(limit=limit)

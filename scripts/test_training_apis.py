@@ -170,6 +170,12 @@ def test_training(client: httpx.Client, verbose: bool) -> None:
     run_test("training/retrain-from-fleet", client, "POST", "/api/training/retrain-from-fleet",
              verbose=verbose)
 
+    print("\n── Training Logs API ──────────────────────────────────────────")
+    logs = run_test("training/logs", client, "GET", "/api/training/logs",
+             check_keys=[], verbose=verbose)
+    if logs is not None and isinstance(logs, list) and verbose:
+        print(f"       Found {len(logs)} logs in GCS bucket.")
+
 
 def test_gemma(client: httpx.Client, verbose: bool) -> None:
     print("\n── Gemma 3 4B Cloud Run Inference ─────────────────────────────")
@@ -200,7 +206,7 @@ def main() -> int:
                         help="Print full response bodies")
     args = parser.parse_args()
 
-    print(f"\n🔬 FieldFix API Test Suite")
+    print(f"\n🔬 no-signal API Test Suite")
     print(f"   Target: {args.base_url}\n")
 
     with httpx.Client(base_url=args.base_url, timeout=120) as client:

@@ -101,3 +101,15 @@ class TrainingResponse(BaseModel):
     status: str
     new_entries_generated: int
     data: list[FaultTreeEntry]
+
+
+class TrainingLog(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    log_id: str
+    timestamp: datetime
+    endpoint: str
+    model_used: str
+    prompt: str
+    raw_response: str
+    error: str | None = None
