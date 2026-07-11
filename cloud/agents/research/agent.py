@@ -3,7 +3,11 @@ from __future__ import annotations
 import logging
 import os
 
-from cloud.schemas import CandidateFix, HandoffReport
+import uuid
+from datetime import datetime, timezone
+
+from cloud.api.training import log_store
+from cloud.schemas import CandidateFix, HandoffReport, TrainingLog
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +50,31 @@ class ResearchAgent:
 
         prompt = _build_prompt(report)
         # TODO: wire real tool spec; google-genai types.Tool(google_search=types.GoogleSearch())
-        response = client.models.generate_content(  # type: ignore[attr-defined]
-            model=_MODEL,
-            contents=prompt,
-            config={"tools": [{"google_search": {}}]},
-        )
-        text = (getattr(response, "text", "") or "").strip() or "no fix identified"
+        
+        error_msg = None
+        response_text = ""
+        try:
+            response = client.models.generate_content(  # type: ignore[attr-defined]
+                model=_MODEL,
+                contents=prompt,
+                config={"tools": [{"google_search": {}}]},
+            )
+            response_text = (getattr(response, "text", "") or "").strip()
+        except Exception as exc:
+            error_msg = str(exc)
+            raise
+        finally:
+            log_store.add_log(TrainingLog(
+                log_id=uuid.uuid4().hex[:8],
+                timestamp=datetime.now(timezone.utc),
+                endpoint="/api/sync/ (ResearchAgent)",
+                model_used=_MODEL,
+                prompt=prompt,
+                raw_response=response_text,
+                error=error_msg,
+            ))
+
+        text = response_text or "no fix identified"
         return CandidateFix(
             fault_summary=f"{report.equipment_type}: {report.leading_hypothesis}",
             proposed_fix=text,
