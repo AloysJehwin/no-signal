@@ -1,10 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, {NetInfoState} from '@react-native-community/netinfo';
 import {HandoffReport} from './HandoffReport';
+import {ConversationLog} from './ConversationLog';
 import {LocalRagStore} from '../rag/LocalRagStore';
 import {FaultTreeEntry} from '../rag/FaultTreeEntry';
+import {handoffToWire, faultTreeFromWire, WireFaultTreeEntry} from './wireFormat';
 
 const QUEUE_KEY = 'fieldfix.sync.queue.v1';
+const CONV_QUEUE_KEY = 'fieldfix.training.conversations.v1';
 const CLOUD_URL_KEY = 'fieldfix.cloud.baseUrl';
 
 // Default points to the Cloud Run service; falls back to local emulator
@@ -20,6 +23,14 @@ export class SyncQueue {
     const list = await this.load();
     list.push(report);
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(list));
+    void this.tryDrain();
+  }
+
+  /** Enqueue a full turn-by-turn conversation log for the training pipeline. */
+  async enqueueConversation(log: ConversationLog): Promise<void> {
+    const list = await this.loadConversations();
+    list.push(log);
+    await AsyncStorage.setItem(CONV_QUEUE_KEY, JSON.stringify(list));
     void this.tryDrain();
   }
 
@@ -65,9 +76,41 @@ export class SyncQueue {
         await this.triggerContinuousLearn(baseUrl, sent);
       }
 
+      // Also flush any queued conversation logs to the training pipeline.
+      await this.drainConversations(baseUrl);
+
       return sent;
     } finally {
       this.draining = false;
+    }
+  }
+
+  private async drainConversations(baseUrl: string): Promise<void> {
+    const logs = await this.loadConversations();
+    if (logs.length === 0) return;
+    try {
+      const res = await fetch(`${baseUrl}/api/training/offline-conversations`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(logs),
+      });
+      if (res.ok) {
+        await AsyncStorage.setItem(CONV_QUEUE_KEY, JSON.stringify([]));
+        // Pull refreshed fault-trees since the cloud may have minted new entries
+        await this.pullFaultTrees(baseUrl);
+      }
+    } catch {
+      // network failure — keep the queue for the next drain
+    }
+  }
+
+  private async loadConversations(): Promise<ConversationLog[]> {
+    const raw = await AsyncStorage.getItem(CONV_QUEUE_KEY);
+    if (!raw) return [];
+    try {
+      return JSON.parse(raw) as ConversationLog[];
+    } catch {
+      return [];
     }
   }
 
@@ -89,13 +132,13 @@ export class SyncQueue {
     }
   }
 
-  /** POST to /api/sync/ (new router prefix) */
+  /** POST to /api/sync/ (new router prefix). Converts camelCase → snake_case at the wire boundary. */
   private async postReport(baseUrl: string, report: HandoffReport): Promise<boolean> {
     try {
       const res = await fetch(`${baseUrl}/api/sync/`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify([report]),
+        body: JSON.stringify([handoffToWire(report)]),
       });
       return res.ok;
     } catch {
@@ -103,12 +146,13 @@ export class SyncQueue {
     }
   }
 
-  /** GET /api/sync/fault-trees and upsert into local SQLite RAG */
+  /** GET /api/sync/fault-trees and upsert into local SQLite RAG (snake→camel). */
   private async pullFaultTrees(baseUrl: string): Promise<void> {
     try {
       const res = await fetch(`${baseUrl}/api/sync/fault-trees`);
       if (!res.ok) return;
-      const entries = (await res.json()) as FaultTreeEntry[];
+      const wireEntries = (await res.json()) as WireFaultTreeEntry[];
+      const entries: FaultTreeEntry[] = wireEntries.map(faultTreeFromWire);
       for (const e of entries) await LocalRagStore.instance.upsertEntry(e);
     } catch {
       // ignore, retry on next connectivity event

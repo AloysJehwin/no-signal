@@ -1,29 +1,10 @@
-import Voice, {SpeechResultsEvent, SpeechErrorEvent} from 'react-native-voice';
-
-export const startListening = (locale = 'en-US'): Promise<string> =>
-  new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (val: string | Error) => {
-      if (settled) return;
-      settled = true;
-      Voice.destroy().then(Voice.removeAllListeners);
-      val instanceof Error ? reject(val) : resolve(val);
-    };
-
-    Voice.onSpeechResults = (e: SpeechResultsEvent) => {
-      const first = e.value?.[0];
-      if (first) finish(first);
-    };
-    Voice.onSpeechError = (e: SpeechErrorEvent) =>
-      finish(new Error(e.error?.message ?? 'voice error'));
-
-    Voice.start(locale).catch((err: unknown) =>
-      finish(err instanceof Error ? err : new Error(String(err))),
-    );
-  });
+// Voice input isn't wired yet. Prototype gap — needs either:
+//   • Gemma-3n audio modality (add audio path to expo-gemma-llm native module), or
+//   • @react-native-voice/voice (requires another EAS rebuild).
+// Until then the UI falls back to typing; this function surfaces a clear message.
+export const startListening = (_locale = 'en-US'): Promise<string> =>
+  Promise.reject(new Error('Voice input not available yet — please type your fault.'));
 
 export const cancelListening = async (): Promise<void> => {
-  await Voice.stop();
-  await Voice.destroy();
-  Voice.removeAllListeners();
+  // no-op
 };
