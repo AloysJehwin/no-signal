@@ -5,21 +5,20 @@ Continuous-learning endpoints.
 
 Concept
 -------
-When the device reconnects, it POSTs offline conversation logs (ConversationLog)
-as well as the symptom topics it expects to encounter.  The cloud uses Gemini
-(web-search grounded) to fetch up-to-date repair knowledge and generates new
-FaultTreeEntry objects that are pushed back to Local RAG on the device's next
-sync.
+When the device reconnects, it POSTs offline conversation logs and the symptom
+topics it expects to encounter. The cloud uses Gemini (web-search grounded) to
+fetch up-to-date repair knowledge and generates new FaultTreeEntry objects that
+are pushed back to Local RAG on the device's next sync.
+
+Credentials are loaded from cloud/secrets.json (gitignored, never committed).
+See cloud/secrets.json.example for the expected shape.
 
 Routes
-  POST /api/training/continuous-learn  – fetch web knowledge for a query and
-                                         mint new FaultTreeEntry objects
-  POST /api/training/offline-conversations – ingest offline conversation logs;
-                                             extract learning signal
-  GET  /api/training/status            – current training job summary
-  POST /api/training/retrain-from-fleet – aggregate all fleet store entries and
-                                          generate a distilled LoRA-style
-                                          summary (concept demo for hackathon)
+  POST /api/training/continuous-learn      – fetch web knowledge + mint FaultTreeEntry
+  POST /api/training/offline-conversations – ingest offline logs; extract learning signal
+  POST /api/training/gemma-infer           – run inference on Cloud-hosted Gemma 3 4B
+  GET  /api/training/status                – fleet + model status
+  POST /api/training/retrain-from-fleet    – LoRA-style summary from fleet data
 """
 from __future__ import annotations
 
@@ -28,6 +27,8 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -36,6 +37,38 @@ from cloud.fleet_store.store import FleetKnowledgeStore
 from cloud.schemas import FaultTreeEntry, Hypothesis, TrainingData, TrainingResponse
 
 logger = logging.getLogger(__name__)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Load credentials from secrets.json (gitignored)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_SECRETS_PATH = Path(__file__).resolve().parent.parent / "secrets.json"
+
+
+def _load_secrets() -> dict[str, Any]:
+    """Load credentials from secrets.json; fall back gracefully if missing."""
+    if _SECRETS_PATH.exists():
+        with _SECRETS_PATH.open() as f:
+            return json.load(f)
+    logger.warning("secrets.json not found at %s — falling back to env vars", _SECRETS_PATH)
+    return {}
+
+
+_secrets = _load_secrets()
+
+# Gemini AI Studio (research + distillation backbone)
+_GEMINI_API_KEY: str = _secrets.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")
+_GEMINI_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/"
+    f"models/gemini-flash-latest:generateContent?key={_GEMINI_API_KEY}"
+)
+
+# Gemma 3 4B — hosted on Cloud Run (GPU: NVIDIA L4)
+_GEMMA_CLOUD_RUN_URL: str = (
+    _secrets.get("cloud_run_gemma_url")
+    or os.getenv("GEMMA_CLOUD_RUN_URL", "")
+)
+
 
 router = APIRouter(
     prefix="/api/training",
@@ -46,28 +79,23 @@ router = APIRouter(
     },
 )
 
-# API key — must be provided via GEMINI_API_KEY environment variable.
-# Set it in Cloud Run secrets or a local .env file; never hard-code it here.
-_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-_GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/"
-    f"models/gemini-flash-latest:generateContent?key={_GEMINI_API_KEY}"
-)
-
 
 def get_store() -> FleetKnowledgeStore:
     return FleetKnowledgeStore()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Core helper: call Gemini and parse JSON
+# Core helpers: call Gemini / Gemma and parse JSON
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _gemini_generate(prompt: str) -> str:
     """Call gemini-flash-latest and return the raw text response."""
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+    if not _GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY not configured. Add it to cloud/secrets.json.",
+        )
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             _GEMINI_URL,
@@ -77,6 +105,25 @@ async def _gemini_generate(prompt: str) -> str:
         resp.raise_for_status()
         data = resp.json()
     return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
+async def _gemma_generate(prompt: str) -> str:
+    """Call the Gemma 3 4B model on Cloud Run (Ollama-compatible endpoint)."""
+    if not _GEMMA_CLOUD_RUN_URL:
+        raise HTTPException(
+            status_code=503,
+            detail="GEMMA_CLOUD_RUN_URL not configured. Add it to cloud/secrets.json.",
+        )
+    payload = {"model": "gemma3:4b", "prompt": prompt, "stream": False}
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{_GEMMA_CLOUD_RUN_URL}/api/generate",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    return data.get("response", "")
 
 
 def _extract_json(text: str) -> str:
