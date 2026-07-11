@@ -1,0 +1,37 @@
+{
+  "fault_id": "genset_runs_rough_002",
+  "equipment_type": "diesel_genset",
+  "symptoms": [
+    "engine runs but stalls",
+    "rough idle",
+    "engine hunting",
+    "surging rpm",
+    "black smoke at idle",
+    "loss of power under load",
+    "engine misfire"
+  ],
+  "hypotheses": [
+    {
+      "name": "dirty_fuel_filter",
+      "diagnostic_step": "Locate the primary (water separator) and secondary fuel filters. Inspect the sediment bowl on the primary for water/debris. If the genset has a vacuum gauge on the filter head, read it with engine at rated speed; otherwise crack the bleed screw on the secondary and observe flow rate.",
+      "expected_result": "Sediment bowl clear of water and particulate. Vacuum gauge reading below 4 inHg (about 13 kPa) at rated speed. Fuel emerges from bleed screw as a steady clean stream, not a dribble.",
+      "if_confirmed": "Drain water from the separator. Replace both primary and secondary filter elements. Bleed the fuel system and re-check idle stability for at least 2 minutes.",
+      "if_ruled_out": "Fuel filtration is adequate. Move to air_intake_blocked hypothesis."
+    },
+    {
+      "name": "air_intake_blocked",
+      "diagnostic_step": "Stop the engine. Remove the air cleaner cover and inspect the primary air filter element against a bright light. Check the restriction indicator (if fitted) and inspect the intake tract from filter to turbo/manifold for collapsed hoses, rodent nests, or foreign objects.",
+      "expected_result": "Light passes visibly through the pleats of the filter. Restriction indicator is green / not tripped (typically trips at 25 inH2O / 6.2 kPa). Intake tract is clear and hoses are firm, not collapsed.",
+      "if_confirmed": "Replace the air filter element. Clean the housing. If restriction indicator is fitted, reset it. Re-check smoke and idle after restart.",
+      "if_ruled_out": "Air intake is clear. Move to injector_fouling hypothesis."
+    },
+    {
+      "name": "injector_fouling",
+      "diagnostic_step": "With engine at idle and eye/hearing protection on, briefly loosen each injector return-line fitting or high-pressure line union one at a time (only quarter-turn, using a rag) and note whether idle roughness changes. A cylinder whose injector is dead will show no change when isolated.",
+      "expected_result": "Isolating each healthy cylinder should cause a noticeable drop in RPM and increase in roughness. A cylinder that produces no change when isolated is the fouled/failed one.",
+      "if_confirmed": "Remove the identified injector, send for pop-test and cleaning, or replace. Inspect nozzle spray pattern — should be a fine even cone at correct opening pressure per manufacturer spec (typically 180-220 bar for indirect injection).",
+      "if_ruled_out": "All cylinders contribute evenly. Escalate: check valve clearances, compression per cylinder, and injection pump timing (defer to expert)."
+    }
+  ],
+  "safety_flags": []
+}

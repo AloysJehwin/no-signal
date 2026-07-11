@@ -1,0 +1,41 @@
+{
+  "fault_id": "genset_overheating_003",
+  "equipment_type": "diesel_genset",
+  "symptoms": [
+    "coolant temp high",
+    "high temperature alarm",
+    "shutdown on temp fault",
+    "engine overheating",
+    "steam from radiator",
+    "coolant boiling",
+    "temperature gauge in red"
+  ],
+  "hypotheses": [
+    {
+      "name": "low_coolant",
+      "diagnostic_step": "Allow the engine to cool for at least 20 minutes (never open a hot pressurised cap — burn risk). Slowly release the radiator cap using a rag. Check coolant level in the radiator and expansion tank. Inspect the ground beneath the genset and around hoses, water pump, and block drain for wet spots or dried coolant residue.",
+      "expected_result": "Radiator full to the filler neck, expansion tank between MIN and MAX. No visible leaks, no crusty green/pink residue on hoses, water pump weep hole, or block. Coolant is clean, not oily, and not brown/rusty.",
+      "if_confirmed": "Top up with the correct coolant/water mix (typically 50/50 with corrosion inhibitor). Identify and repair the leak source before returning to service. Pressure-test the cooling system to 1 bar and check it holds for 10 minutes.",
+      "if_ruled_out": "Coolant level and integrity are OK. Move to radiator_blocked hypothesis."
+    },
+    {
+      "name": "radiator_blocked",
+      "diagnostic_step": "With engine cool, inspect the radiator core externally for debris, insect nests, oil film, or bent fins. Start the engine and bring to operating temperature; using a non-contact infrared thermometer, scan the radiator face in a grid pattern from top to bottom.",
+      "expected_result": "External core is clean with straight fins and light passes through. IR temperature across the core face is uniform within about 10-15 C top to bottom (top slightly hotter than bottom). Large cold spots indicate internal blockage; uniform hot with poor airflow indicates external fouling.",
+      "if_confirmed": "For external fouling: back-flush the core with low-pressure water from the fan side outward and straighten fins. For internal blockage: flush the cooling system with a proprietary radiator flush per manufacturer instructions, or remove and rod the radiator.",
+      "if_ruled_out": "Radiator is flowing and clean. Move to water_pump_failure hypothesis."
+    },
+    {
+      "name": "water_pump_failure",
+      "diagnostic_step": "With engine cold and cap off, start the engine and let it warm until the thermostat opens. Observe coolant movement in the radiator neck. Also inspect the water pump weep hole for weeping coolant and grasp the pump pulley (engine off) to check for shaft play. Verify drive belt tension.",
+      "expected_result": "Once thermostat opens, visible coolant circulation / turbulence should appear in the radiator neck. No weeping from the pump weep hole, no radial play in the pump shaft, drive belt deflects 10-15 mm under moderate thumb pressure at mid-span.",
+      "if_confirmed": "Replace the water pump and its gasket. Replace the drive belt at the same time. Refill with the correct coolant, bleed air from the highest cooling point per manufacturer procedure, and re-test under load.",
+      "if_ruled_out": "Water pump appears healthy. Escalate: check thermostat operation (remove and test in hot water — should open at rated temp, typically 82 C), head gasket integrity (combustion gases in coolant test), and fan clutch/pusher fan function (defer to expert)."
+    }
+  ],
+  "safety_flags": [
+    "burning smell",
+    "steam under pressure",
+    "coolant spraying"
+  ]
+}
