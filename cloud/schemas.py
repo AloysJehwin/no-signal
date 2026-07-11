@@ -86,3 +86,18 @@ class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["ok"] = "ok"
+
+
+class TrainingData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str
+    equipment_type: str
+
+
+class TrainingResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    new_entries_generated: int
+    data: list[FaultTreeEntry]

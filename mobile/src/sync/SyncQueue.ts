@@ -6,7 +6,10 @@ import {FaultTreeEntry} from '../rag/FaultTreeEntry';
 
 const QUEUE_KEY = 'fieldfix.sync.queue.v1';
 const CLOUD_URL_KEY = 'fieldfix.cloud.baseUrl';
-const DEFAULT_CLOUD_URL = 'http://10.0.2.2:8000';
+
+// Default points to the Cloud Run service; falls back to local emulator
+const DEFAULT_CLOUD_URL =
+  'https://nosignal-cloud-115075076514.us-central1.run.app';
 
 export class SyncQueue {
   static readonly instance = new SyncQueue();
@@ -27,7 +30,9 @@ export class SyncQueue {
   watchConnectivity(): void {
     if (this.unsubscribe) return;
     this.unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      if (state.isConnected && state.isInternetReachable !== false) void this.tryDrain();
+      if (state.isConnected && state.isInternetReachable !== false) {
+        void this.tryDrain();
+      }
     });
   }
 
@@ -43,14 +48,23 @@ export class SyncQueue {
       const baseUrl = (await AsyncStorage.getItem(CLOUD_URL_KEY)) ?? DEFAULT_CLOUD_URL;
       const pending = await this.load();
       const sent: HandoffReport[] = [];
+
       for (const r of pending) {
         const ok = await this.postReport(baseUrl, r);
         if (!ok) break;
         sent.push(r);
       }
+
       const remaining = pending.slice(sent.length);
       await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(remaining));
-      if (sent.length > 0) await this.pullFaultTrees(baseUrl);
+
+      if (sent.length > 0) {
+        // Pull updated fleet fault-trees back into Local RAG
+        await this.pullFaultTrees(baseUrl);
+        // Trigger continuous learning for topics we just drained
+        await this.triggerContinuousLearn(baseUrl, sent);
+      }
+
       return sent;
     } finally {
       this.draining = false;
@@ -75,12 +89,13 @@ export class SyncQueue {
     }
   }
 
+  /** POST to /api/sync/ (new router prefix) */
   private async postReport(baseUrl: string, report: HandoffReport): Promise<boolean> {
     try {
-      const res = await fetch(`${baseUrl}/sync`, {
+      const res = await fetch(`${baseUrl}/api/sync/`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(report),
+        body: JSON.stringify([report]),
       });
       return res.ok;
     } catch {
@@ -88,14 +103,45 @@ export class SyncQueue {
     }
   }
 
+  /** GET /api/sync/fault-trees and upsert into local SQLite RAG */
   private async pullFaultTrees(baseUrl: string): Promise<void> {
     try {
-      const res = await fetch(`${baseUrl}/fault-trees`);
+      const res = await fetch(`${baseUrl}/api/sync/fault-trees`);
       if (!res.ok) return;
       const entries = (await res.json()) as FaultTreeEntry[];
       for (const e of entries) await LocalRagStore.instance.upsertEntry(e);
     } catch {
       // ignore, retry on next connectivity event
     }
+  }
+
+  /**
+   * POST to /api/training/continuous-learn for each unique equipment type
+   * in the drained reports so the cloud pre-fetches fresh web knowledge.
+   */
+  private async triggerContinuousLearn(
+    baseUrl: string,
+    reports: HandoffReport[],
+  ): Promise<void> {
+    const seen = new Set<string>();
+    for (const r of reports) {
+      const key = `${r.equipmentType}:${r.leadingHypothesis}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        await fetch(`${baseUrl}/api/training/continuous-learn`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            query: `${r.equipmentType} ${r.leadingHypothesis} repair diagnosis`,
+            equipment_type: r.equipmentType,
+          }),
+        });
+      } catch {
+        // best-effort; ignore
+      }
+    }
+    // Pull updated fault-trees again after learning
+    await this.pullFaultTrees(baseUrl);
   }
 }
