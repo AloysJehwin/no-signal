@@ -1,4 +1,4 @@
-# FieldFix — Offline Multi-Turn Diagnostic Agent
+# no-signal — Offline Multi-Turn Diagnostic Agent
 ## Complete System Architecture
 ### Google DeepMind Bangalore Hackathon — Special Prize Track (Gemma 4 Local-First Agents)
 
@@ -8,7 +8,7 @@
 
 Field technicians (diesel genset / irrigation pump repair, initially) working in low-connectivity rural areas need expert diagnostic guidance but cannot rely on cloud AI. Existing "on-device AI" is a single-turn chatbot moved from cloud to phone — it doesn't hold state, doesn't recover from failed attempts, and doesn't know what to do when it doesn't know something.
 
-FieldFix is a genuine sense-decide-act-check agent that runs entirely offline, revises its own hypotheses when a fix fails, knows when to defer to a human, and — critically — **improves the entire fleet's local knowledge** the moment any single device reconnects to the internet.
+no-signal is a genuine sense-decide-act-check agent that runs entirely offline, revises its own hypotheses when a fix fails, knows when to defer to a human, and — critically — **improves the entire fleet's local knowledge** the moment any single device reconnects to the internet.
 
 ---
 

@@ -17,10 +17,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nosignal.cloud")
 
 app = FastAPI(
-    title="FieldFix Cloud API",
+    title="no-signal Cloud API",
     version="0.1.0",
     description=(
-        "Cloud backend for **FieldFix** — the offline multi-turn diagnostic agent for field technicians.\n\n"
+        "Cloud backend for **no-signal** — the offline multi-turn diagnostic agent for field technicians.\n\n"
         "## Endpoints\n"
         "- **`/api/sync`** — Mobile devices POST unresolved HandoffReports here when connectivity "
         "is restored; GET `/api/sync/fault-trees` to pull updated knowledge back to Local RAG.\n"
@@ -29,7 +29,7 @@ app = FastAPI(
         "- **`/health`** — Simple liveness probe.\n\n"
         "Swagger UI: **/docs** | ReDoc: **/redoc**"
     ),
-    contact={"name": "FieldFix Team", "url": "https://github.com/AloysJehwin/no-signal"},
+    contact={"name": "no-signal Team", "url": "https://github.com/AloysJehwin/no-signal"},
     license_info={"name": "MIT"},
 )
 
