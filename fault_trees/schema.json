@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fieldfix.local/schemas/fault_tree_entry.json",
+  "title": "FieldFix Fault-Tree Entry",
+  "description": "Structured fault-tree entry consumed by the on-device Local RAG store. Produced hand-curated for seed data and by the cloud Distillation Agent on sync. Schema matches ARCHITECTURE.md §3.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fault_id", "equipment_type", "symptoms", "hypotheses", "safety_flags"],
+  "properties": {
+    "fault_id": {
+      "type": "string",
+      "description": "Unique lowercase snake_case identifier. Must match the file name (without .json).",
+      "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "equipment_type": {
+      "type": "string",
+      "description": "Class of equipment this entry applies to.",
+      "enum": ["diesel_genset", "irrigation_pump"]
+    },
+    "symptoms": {
+      "type": "array",
+      "description": "Short symptom phrases used for keyword/vector lookup against SymptomInput.",
+      "minItems": 1,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 120
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "description": "Ordered list of candidate hypotheses. The reasoning loop iterates through these, ruling each out based on CHECK results.",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "diagnostic_step", "expected_result", "if_confirmed", "if_ruled_out"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Machine-readable hypothesis name in snake_case. Used in SessionState.ruled_out_hypotheses.",
+            "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+            "minLength": 3,
+            "maxLength": 60
+          },
+          "diagnostic_step": {
+            "type": "string",
+            "description": "Concrete action for the technician to perform to test this hypothesis.",
+            "minLength": 10,
+            "maxLength": 400
+          },
+          "expected_result": {
+            "type": "string",
+            "description": "Measurable / observable outcome that would confirm the hypothesis. Should include units or clear qualitative markers.",
+            "minLength": 3,
+            "maxLength": 300
+          },
+          "if_confirmed": {
+            "type": "string",
+            "description": "Fix or remedial action if the hypothesis is confirmed.",
+            "minLength": 5,
+            "maxLength": 400
+          },
+          "if_ruled_out": {
+            "type": "string",
+            "description": "Next hypothesis or diagnostic path if the observed result does not match expected_result.",
+            "minLength": 5,
+            "maxLength": 400
+          }
+        }
+      }
+    },
+    "safety_flags": {
+      "type": "array",
+      "description": "Safety-critical keywords/phrases. Presence of any of these in technician input triggers the DEFER path per ARCHITECTURE.md §3.2.",
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 60
+      }
+    }
+  }
+}
