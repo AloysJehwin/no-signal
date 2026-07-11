@@ -45,3 +45,7 @@ class FleetKnowledgeStore:
         # Test helper; not part of the production contract.
         with self._entry_lock:  # type: ignore[attr-defined]
             self._entries.clear()  # type: ignore[attr-defined]
+
+    def remove_entry(self, fault_id: str) -> None:
+        with self._entry_lock:  # type: ignore[attr-defined]
+            self._entries.pop(fault_id, None)  # type: ignore[attr-defined]

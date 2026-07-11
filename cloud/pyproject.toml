@@ -32,6 +32,7 @@ packages = [
     "cloud.agents.distillation",
     "cloud.fleet_store",
     "cloud.media",
+    "cloud.api",
 ]
 package-dir = {"cloud" = "."}
 
