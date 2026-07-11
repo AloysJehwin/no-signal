@@ -3,7 +3,11 @@ from __future__ import annotations
 import logging
 import os
 
-from cloud.schemas import CandidateFix, ValidatedFix
+import uuid
+from datetime import datetime, timezone
+
+from cloud.api.training import log_store
+from cloud.schemas import CandidateFix, TrainingLog, ValidatedFix
 
 logger = logging.getLogger(__name__)
 
@@ -74,17 +78,31 @@ class ValidationAgent:
             f"Diagnostic step: {candidate.diagnostic_step}\n"
             "Reply with one of: CONFIRM | REJECT | UNSURE, then a brief rationale."
         )
+        error_msg = None
+        response_text = ""
         try:
             response = client.models.generate_content(  # type: ignore[attr-defined]
                 model=_MODEL,
                 contents=prompt,
                 config={"tools": [{"google_search": {}}]},
             )
-        except Exception:  # noqa: BLE001
+            response_text = (getattr(response, "text", "") or "").strip()
+        except Exception as exc:  # noqa: BLE001
             logger.exception("validation cross-check call failed")
+            error_msg = str(exc)
             return None
+        finally:
+            log_store.add_log(TrainingLog(
+                log_id=uuid.uuid4().hex[:8],
+                timestamp=datetime.now(timezone.utc),
+                endpoint="/api/sync/ (ValidationAgent)",
+                model_used=_MODEL,
+                prompt=prompt,
+                raw_response=response_text,
+                error=error_msg,
+            ))
 
-        text = (getattr(response, "text", "") or "").strip().upper()
+        text = response_text.upper()
         if text.startswith("REJECT"):
             return None
         if text.startswith("CONFIRM"):

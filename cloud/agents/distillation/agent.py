@@ -4,9 +4,11 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 
-from cloud.schemas import FaultTreeEntry, HandoffReport, Hypothesis, ValidatedFix
+from cloud.api.training import log_store
+from cloud.schemas import FaultTreeEntry, HandoffReport, Hypothesis, TrainingLog, ValidatedFix
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +45,31 @@ class DistillationAgent:
         self, client: object, fix: ValidatedFix, report: HandoffReport
     ) -> FaultTreeEntry | None:
         prompt = _build_prompt(fix, report)
+        error_msg = None
+        response_text = ""
         try:
             response = client.models.generate_content(  # type: ignore[attr-defined]
                 model=_MODEL,
                 contents=prompt,
                 config={"response_mime_type": "application/json"},
             )
-        except Exception:  # noqa: BLE001
+            response_text = (getattr(response, "text", "") or "").strip()
+        except Exception as exc:  # noqa: BLE001
             logger.exception("distillation model call failed")
+            error_msg = str(exc)
             return None
+        finally:
+            log_store.add_log(TrainingLog(
+                log_id=uuid.uuid4().hex[:8],
+                timestamp=datetime.now(timezone.utc),
+                endpoint="/api/sync/ (DistillationAgent)",
+                model_used=_MODEL,
+                prompt=prompt,
+                raw_response=response_text,
+                error=error_msg,
+            ))
 
-        raw = (getattr(response, "text", "") or "").strip()
+        raw = response_text
         if not raw:
             return None
         try:
