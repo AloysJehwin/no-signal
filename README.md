@@ -1,128 +1,119 @@
 # no-signal
 
-> Offline multi-turn diagnostic agent for field technicians
+> True Autonomous, Offline-First Multimodal Diagnostic Agent
 
 ![build](https://img.shields.io/badge/build-passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![react-native](https://img.shields.io/badge/React%20Native-0.75-61dafb)
 ![python](https://img.shields.io/badge/Python-3.11-3776ab)
 
-Google DeepMind Bangalore Hackathon — Special Prize Track (Gemma 4 Local-First Agents)
+Built for the **Google DeepMind Bangalore Hackathon** — Targetting: 
+1. **Problem Statement 1:** Real-Time Multimodal Interaction (Gemini Live API)
+2. **Special Prize:** Best Use of Gemma 4 - Local-First Agents on Gemma
 
 ---
 
-## 🔧 The Problem
+## 🎯 The Vision: Breaking the Chatbot Paradigm
 
-Field technicians (diesel gensets, irrigation pumps) work in low-connectivity rural areas where cloud AI is unreachable. Existing "on-device AI" is a single-turn chatbot that lost the plot the second it left the datacenter — it doesn't hold state, doesn't revise when a fix fails, and doesn't know when to defer to a human.
+### 1. Real-Time Multimodal Interaction (Gemini Live)
+Most "voice assistants" are just text interfaces wearing a microphone—wait, process, respond, repeat. **no-signal** breaks this rigid turn-based structure. Leveraging the **Gemini Live API** and **Gemma Multimodal**, the agent can see what the technician sees through a live camera feed and listen to real-time audio. Users can interrupt the agent mid-response, the model reads vocal tone, and it proactively points out anomalies in the video feed that the user hasn't explicitly mentioned. It’s a fluid, uninterrupted collaboration, not a staggered Q&A.
 
-no-signal is a real sense→decide→act→check agent that runs entirely offline, revises hypotheses when a step fails, escalates when it should, and — the fun part — **improves the entire fleet's local knowledge the moment any single device reconnects**.
+### 2. True Local-First Agency (Gemma 4 On-Device)
+Most "on-device AI" simply moves a cloud chatbot onto a phone. It forgets context, fails rigidly, and assumes a server connection will eventually return. Real agency means holding state across a complex diagnostic task, deciding what to do next based on what’s already been learned, and recovering when a plan breaks—entirely offline.
+
+Across regions with spotty connectivity, sending data to a server is a non-starter. **no-signal** runs a complete, autonomous **Sense → Decide → Act → Check** loop entirely on-device using **Gemma 4**. It isn't a straight arrow from input to output. It maintains local state, attempts a fix, evaluates if the fix worked, revises its hypothesis upon failure, and knows exactly when to draw a boundary and defer to a human.
+
+### 3. Fleet-Wide Continuous Learning
+When the local agent hits a dead end, it caches the unresolved session. The moment the device reconnects to the internet, our orchestration pipeline syncs the session to the cloud. **Gemini Flash** conducts web-grounded research to find the fix, **Nano banana** generates visual guides, and **Gemini Flash Live** synthesizes real-time audio instructions. This new knowledge is distilled into a structured fault-tree and instantly pushed back to the local device. The next time *any* technician faces the issue offline, Gemma 4 resolves it instantly.
 
 ---
 
-## 🗺️ System Diagram
+## 🗺️ System Architecture
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         ON-DEVICE (ANDROID)                          │
-│                         Fully offline capable                        │
+│                Gemma 4 E2B/E4B • Fully offline capable               │
 │                                                                        │
 │  ┌──────────┐    ┌──────────────┐    ┌─────────────┐                │
 │  │  SENSE   │───▶│    DECIDE    │───▶│     ACT     │                │
-│  │ (input)  │    │ Gemma 4 E4B  │    │ (show step) │                │
-│  └──────────┘    │  + Local RAG │    └──────┬──────┘                │
-│       ▲          └──────────────┘           │                       │
-│       │                  ▲                  ▼                       │
+│  │ (audio/  │    │ Gemma 4      │    │ (speak/     │                │
+│  │  video)  │    │  + Local RAG │    │  show step) │                │
+│  └──────────┘    └──────────────┘    └──────┬──────┘                │
+│       ▲                  ▲                  ▼                       │
 │       │           ┌──────┴───────┐    ┌─────────────┐               │
-│       └───────────│    CHECK     │◀───│  Technician  │               │
-│                    │ (compare    │    │   reports     │               │
-│                    │  outcome)   │    │   result      │               │
-│                    └──────┬──────┘    └─────────────┘               │
-│                           │                                          │
-│                  ┌────────┴────────┐                                │
-│                  │  Hypothesis     │                                │
-│                  │  resolved?      │                                │
-│                  └────┬───────┬────┘                                │
-│                    NO │       │ YES                                 │
-│                       ▼       ▼                                     │
-│              ┌────────────┐ ┌──────────┐                            │
-│              │  REVISE &  │ │  RESOLVE │                            │
-│              │  RETRY     │ │  session │                            │
-│              │ (loop back │ └──────────┘                            │
-│              │  to DECIDE)│                                         │
-│              └─────┬──────┘                                         │
-│                     │ after N failures OR safety flag                │
-│                     ▼                                                │
-│              ┌─────────────┐                                        │
-│              │    DEFER    │                                        │
-│              │  Generate   │                                        │
-│              │  structured │                                        │
-│              │  handoff    │                                        │
-│              │  report     │──────┐                                 │
-│              └─────────────┘      │                                 │
-│                                    ▼                                 │
-│                         ┌─────────────────────┐                     │
-│                         │  LOCAL SYNC QUEUE    │                     │
-│                         │ (unresolved cases +  │                     │
-│                         │  session logs, held  │                     │
-│                         │  until connectivity) │                     │
-│                         └──────────┬───────────┘                     │
-└────────────────────────────────────┼─────────────────────────────────┘
-                                      │ connectivity restored
-                                      ▼
+│       └───────────│    CHECK     │◀───│ Technician  │               │
+│                   │ (did it work?│    │ (Live feed  │               │
+│                   │  interrupts) │    │  interrupts)│               │
+│                   └──────┬──────┘    └─────────────┘               │
+│                          │                                          │
+│                 ┌────────┴────────┐                                 │
+│                 │  Hypothesis     │                                 │
+│                 │  resolved?      │                                 │
+│                 └────┬───────┬────┘                                 │
+│                   NO │       │ YES                                  │
+│                      ▼       ▼                                      │
+│             ┌────────────┐ ┌──────────┐                             │
+│             │  REVISE &  │ │  RESOLVE │                             │
+│             │  RETRY     │ │  session │                             │
+│             │ (loop back │ └──────────┘                             │
+│             │  to DECIDE)│                                          │
+│             └─────┬──────┘                                          │
+│                   │ after N failures OR safety flag                 │
+│                   ▼                                                 │
+│             ┌─────────────┐                                         │
+│             │    DEFER    │                                         │
+│             │  Generate   │                                         │
+│             │  structured │                                         │
+│             │  handoff    │──────┐                                  │
+│             └─────────────┘      │                                  │
+│                                  ▼                                  │
+│                       ┌─────────────────────┐                       │
+│                       │  LOCAL SYNC QUEUE    │                       │
+│                       │ (held until network) │                       │
+│                       └──────────┬───────────┘                       │
+└──────────────────────────────────┼──────────────────────────────────┘
+                                   │ connectivity restored
+                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    CLOUD (iAPI / Managed Agents)                     │
+│                    CLOUD (Orchestration Pipeline)                    │
 │                                                                        │
 │   ┌───────────────┐   ┌────────────────┐   ┌─────────────────────┐  │
 │   │ RESEARCH AGENT│──▶│ VALIDATION     │──▶│  DISTILLATION AGENT │  │
-│   │ Gemini 3.5    │   │ AGENT          │   │  Compresses verified │  │
-│   │ Flash +       │   │ Cross-checks   │   │  fix into structured │  │
-│   │ web search     │   │ against 2nd    │   │  fault-tree JSON     │  │
-│   │               │   │ source          │   │                      │  │
+│   │ Gemini Flash  │   │ AGENT          │   │  Compresses verified │  │
+│   │ + web search  │   │ Cross-checks   │   │  fix into structured │  │
+│   │               │   │ against 2nd    │   │  fault-tree JSON     │  │
+│   │               │   │ source         │   │                      │  │
 │   └───────────────┘   └────────────────┘   └──────────┬───────────┘  │
 │                                                          │             │
 │              ┌───────────────────────────────────────────┘            │
 │              ▼                                                        │
 │   ┌─────────────────────┐        ┌─────────────────────┐             │
-│   │  NB2 LITE            │        │   OMNI FLASH         │             │
-│   │  Generates annotated │        │  Generates short      │             │
-│   │  diagnostic          │        │  instructional repair │             │
-│   │  illustration         │        │  video clip           │             │
+│   │  NANO BANANA         │        │   GEMINI FLASH LIVE  │             │
+│   │  Generates dynamic   │        │  Synthesizes real-   │             │
+│   │  repair illustration │        │  time audio guide    │             │
 │   └──────────┬───────────┘        └──────────┬───────────┘             │
 │              │                                │                        │
 │              └────────────┬───────────────────┘                        │
-│                            ▼                                           │
+│                           ▼                                            │
 │               ┌─────────────────────────┐                              │
 │               │  FLEET KNOWLEDGE STORE   │                              │
-│               │  (aggregated across all  │                              │
-│               │   field devices)         │                              │
-│               └────────────┬─────────────┘                              │
-│                             │                                           │
-│                  (stretch) periodic LoRA                                │
-│                  fine-tune on aggregated                                │
-│                  unresolved-case data                                   │
-│                             ▼                                           │
-│               ┌─────────────────────────┐                              │
-│               │  LoRA Adapter Delta      │                              │
-│               │  (small, shippable)      │                              │
-│               └────────────┬─────────────┘                              │
-└────────────────────────────┼──────────────────────────────────────────┘
-                              │ pushed on next sync
-                              ▼
-                 back to ON-DEVICE Local RAG +
-                 (stretch) adapter merge into Gemma 4 E4B
+│               │ (pushed on next sync)    │                              │
+│               └─────────────────────────┘                              │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 📁 Repo Layout
 
-```
+```text
 no-signal/
-├── mobile/          # React Native (TypeScript) Android app + native Gemma bridge
-├── cloud/           # FastAPI + Research/Validation/Distillation agents
+├── mobile/          # React Native Android app + Gemma 4 native bridge
+├── cloud/           # FastAPI backend + Orchestration Pipeline (Research/Validate/Distill)
 ├── fault_trees/     # Seed fault-tree JSON KB + schema
-├── docs/            # Architecture, demo runbook, dev setup, deep-dives
-├── scripts/         # sync_demo.py, seed_local_rag.py
+├── docs/            # Architecture, API endpoints, dev setup
+├── scripts/         # End-to-end test suites and sync simulators
 └── .github/         # CI workflows
 ```
 
@@ -135,49 +126,27 @@ no-signal/
 cd mobile && npm install && npx react-native run-android
 ```
 
-**Cloud (FastAPI):**
+**Cloud Backend (FastAPI):**
 ```bash
 cd cloud && pip install -e . && uvicorn cloud.main:app --reload
 ```
-
-**Simulated sync demo:**
-```bash
-python scripts/sync_demo.py
-```
-
-Full setup details: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+*Note: Ensure `cloud/secrets.json` is configured. See `docs/TRAINING_API.md` for Cloud Run deployment commands.*
 
 ---
 
-## 🎬 Demo (3 minutes)
+## 🎬 3-Minute Demo Runbook
 
-- ✈️ Airplane mode **ON** — visible on the device
-- Technician reports "genset won't start" (voice)
-- Agent proposes diagnostic step 1 → **step 1 fails** → live hypothesis revision (not a repeat)
-- Failure threshold hit → DEFER → structured handoff report displayed
-- Toggle connectivity **ON** → sync fires → cloud pipeline runs → new fault-tree entry lands in Local RAG
-- Simulated second session resolves the same fault instantly using the freshly-learned entry
-
-Full runbook: [`docs/DEMO.md`](docs/DEMO.md).
-
----
-
-## 👥 Team Split
-
-**Person A — On-device Agent Core**
-- Gemma E4B integration (LiteRT-LM / AICore)
-- State Manager, Reasoning Loop Controller
-- CHECK / revise / DEFER logic
-
-**Person B — Knowledge, UI, Cloud Sync**
-- Fault-tree KB curation (5-6 genset / pump scenarios)
-- Android UI (voice, text, camera, offline indicator)
-- Sync layer + cloud agent pipeline (iAPI) + NB2 Lite / Omni Flash
+1. **Airplane mode ON** — Start device offline.
+2. Technician initiates a **live audio/video session** and reports an engine fault.
+3. **Gemma 4** takes over locally. The tech interrupts mid-sentence to point the camera at a leaking valve. The agent adapts instantly without breaking the conversational flow.
+4. Agent proposes a fix → **Fix fails**.
+5. The local **State Manager** catches the failure, revises the hypothesis, and loops back to DECIDE. 
+6. After 3 local failures, the agent determines it lacks the knowledge, gracefully **DEFERS** the issue, and caches a highly detailed Handoff Report.
+7. **Airplane mode OFF**. The app instantly syncs the failure to the cloud. 
+8. The cloud **Orchestration Pipeline** (Gemini Flash + Nano Banana + Flash Live) resolves the anomaly, updates the Fleet Knowledge Store, and syncs the new rules back down.
+9. **Simulated second offline session** resolves the identical fault instantly using the freshly-learned, on-device data.
 
 ---
 
 ## 📄 License
-
 MIT — see [`LICENSE`](LICENSE).
-
-Authoritative design doc: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
