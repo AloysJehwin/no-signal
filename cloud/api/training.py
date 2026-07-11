@@ -1,0 +1,301 @@
+"""
+cloud/api/training.py
+----------------------
+Continuous-learning endpoints.
+
+Concept
+-------
+When the device reconnects, it POSTs offline conversation logs (ConversationLog)
+as well as the symptom topics it expects to encounter.  The cloud uses Gemini
+(web-search grounded) to fetch up-to-date repair knowledge and generates new
+FaultTreeEntry objects that are pushed back to Local RAG on the device's next
+sync.
+
+Routes
+  POST /api/training/continuous-learn  – fetch web knowledge for a query and
+                                         mint new FaultTreeEntry objects
+  POST /api/training/offline-conversations – ingest offline conversation logs;
+                                             extract learning signal
+  GET  /api/training/status            – current training job summary
+  POST /api/training/retrain-from-fleet – aggregate all fleet store entries and
+                                          generate a distilled LoRA-style
+                                          summary (concept demo for hackathon)
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import uuid
+from datetime import datetime, timezone
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+
+from cloud.fleet_store.store import FleetKnowledgeStore
+from cloud.schemas import FaultTreeEntry, Hypothesis, TrainingData, TrainingResponse
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/api/training",
+    tags=["Continuous Learning"],
+    responses={
+        200: {"description": "Successful operation"},
+        422: {"description": "Validation error"},
+    },
+)
+
+# API key — must be provided via GEMINI_API_KEY environment variable.
+# Set it in Cloud Run secrets or a local .env file; never hard-code it here.
+_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+_GEMINI_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/"
+    f"models/gemini-flash-latest:generateContent?key={_GEMINI_API_KEY}"
+)
+
+
+def get_store() -> FleetKnowledgeStore:
+    return FleetKnowledgeStore()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Core helper: call Gemini and parse JSON
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def _gemini_generate(prompt: str) -> str:
+    """Call gemini-flash-latest and return the raw text response."""
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            _GEMINI_URL,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def _extract_json(text: str) -> str:
+    """Strip markdown fences from a model response if present."""
+    if "```json" in text:
+        text = text.split("```json", 1)[1].split("```", 1)[0]
+    elif "```" in text:
+        text = text.split("```", 1)[1].split("```", 1)[0]
+    return text.strip()
+
+
+def _build_fault_tree_prompt(query: str, equipment_type: str) -> str:
+    return (
+        f"You are a field-service diagnostics expert. "
+        f"Search for the latest repair knowledge for '{equipment_type}' equipment "
+        f"regarding this problem: '{query}'.\n\n"
+        "Return a JSON ARRAY (no extra text, no markdown) of fault-tree entries. "
+        "Each entry must follow this exact schema:\n"
+        "[\n"
+        "  {\n"
+        '    "fault_id": "<equipment>_<issue>_<short_uuid>",\n'
+        '    "symptoms": ["<symptom1>", "<symptom2>"],\n'
+        '    "hypotheses": [\n'
+        "      {\n"
+        '        "name": "<hypothesis_name>",\n'
+        '        "diagnostic_step": "<single verifiable step>",\n'
+        '        "expected_result": "<what a pass looks like>",\n'
+        '        "if_confirmed": "<repair action>",\n'
+        '        "if_ruled_out": "<next hypothesis or escalate>"\n'
+        "      }\n"
+        "    ],\n"
+        '    "safety_flags": []\n'
+        "  }\n"
+        "]\n\n"
+        "Include 2-4 hypotheses per entry. Return ONLY the JSON array."
+    )
+
+
+def _build_conversation_learning_prompt(conversation: dict) -> str:
+    turns = conversation.get("turns", [])
+    history = "\n".join(
+        f"[{t.get('role','?')}]: {t.get('content','')}" for t in turns
+    )
+    equipment = conversation.get("equipment_type", "unknown")
+    return (
+        f"This is an offline diagnostic conversation for '{equipment}' equipment.\n\n"
+        f"{history}\n\n"
+        "Extract any resolved diagnostic steps and structure them as a JSON ARRAY "
+        "of fault-tree entries using the same schema as before. "
+        "If nothing conclusive was reached, return an empty array []. "
+        "Return ONLY the JSON array."
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Routes
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/continuous-learn",
+    response_model=TrainingResponse,
+    summary="Fetch new web knowledge and mint fault-tree entries",
+    description=(
+        "Sends a diagnostic query to Gemini (web-search grounded) and parses the "
+        "response into structured FaultTreeEntry objects that are added to the "
+        "Fleet Knowledge Store. Devices will receive these on their next sync."
+    ),
+)
+async def continuous_learn(
+    data: TrainingData,
+    store: FleetKnowledgeStore = Depends(get_store),
+) -> TrainingResponse:
+    prompt = _build_fault_tree_prompt(data.query, data.equipment_type)
+    logger.info("continuous-learn: query=%r equipment=%s", data.query, data.equipment_type)
+
+    try:
+        raw = await _gemini_generate(prompt)
+        parsed = json.loads(_extract_json(raw))
+    except Exception as exc:
+        logger.exception("continuous-learn: gemini call or parse failed")
+        raise HTTPException(status_code=502, detail=f"Gemini error: {exc}") from exc
+
+    new_entries: list[FaultTreeEntry] = []
+    for item in parsed:
+        try:
+            entry = FaultTreeEntry(
+                fault_id=item.get("fault_id", f"{data.equipment_type}_{uuid.uuid4().hex[:8]}"),
+                symptoms=item.get("symptoms", []),
+                hypotheses=[Hypothesis(**h) for h in item.get("hypotheses", [])],
+                safety_flags=item.get("safety_flags", []),
+                source_session_id=None,
+                created_at=datetime.now(timezone.utc),
+            )
+            store.add_entry(entry)
+            new_entries.append(entry)
+        except Exception:
+            logger.exception("continuous-learn: failed to parse entry %s", item)
+
+    return TrainingResponse(
+        status="success",
+        new_entries_generated=len(new_entries),
+        data=new_entries,
+    )
+
+
+@router.post(
+    "/offline-conversations",
+    response_model=TrainingResponse,
+    summary="Ingest offline conversation logs and extract learning signal",
+    description=(
+        "Accepts a list of raw offline conversation objects (each with an 'equipment_type' "
+        "and 'turns' list). Gemini extracts any resolved diagnostic knowledge and mints "
+        "new FaultTreeEntry objects for the fleet store."
+    ),
+)
+async def ingest_offline_conversations(
+    conversations: list[dict],
+    store: FleetKnowledgeStore = Depends(get_store),
+) -> TrainingResponse:
+    all_entries: list[FaultTreeEntry] = []
+
+    for conv in conversations:
+        equipment = conv.get("equipment_type", "unknown")
+        logger.info("offline-conversations: processing conversation for %s", equipment)
+        prompt = _build_conversation_learning_prompt(conv)
+        try:
+            raw = await _gemini_generate(prompt)
+            parsed = json.loads(_extract_json(raw))
+        except Exception:
+            logger.exception("offline-conversations: failed for one conversation, skipping")
+            continue
+
+        for item in parsed:
+            try:
+                entry = FaultTreeEntry(
+                    fault_id=item.get("fault_id", f"{equipment}_{uuid.uuid4().hex[:8]}"),
+                    symptoms=item.get("symptoms", []),
+                    hypotheses=[Hypothesis(**h) for h in item.get("hypotheses", [])],
+                    safety_flags=item.get("safety_flags", []),
+                    source_session_id=conv.get("session_id"),
+                    created_at=datetime.now(timezone.utc),
+                )
+                store.add_entry(entry)
+                all_entries.append(entry)
+            except Exception:
+                logger.exception("offline-conversations: failed to parse entry %s", item)
+
+    return TrainingResponse(
+        status="success",
+        new_entries_generated=len(all_entries),
+        data=all_entries,
+    )
+
+
+@router.get(
+    "/status",
+    summary="Training / fleet knowledge status",
+    description="Returns the current state of the Fleet Knowledge Store and model training readiness.",
+)
+async def training_status(store: FleetKnowledgeStore = Depends(get_store)) -> dict:
+    entries = store.list_entries()
+    by_equipment: dict[str, int] = {}
+    for e in entries:
+        # derive equipment from fault_id prefix (e.g. diesel_genset_...)
+        equip = "_".join(e.fault_id.split("_")[:2]) if "_" in e.fault_id else e.fault_id
+        by_equipment[equip] = by_equipment.get(equip, 0) + 1
+
+    return {
+        "status": "ready",
+        "total_fleet_entries": len(entries),
+        "entries_by_equipment": by_equipment,
+        "lora_adapter_ready": len(entries) >= 10,  # concept threshold
+        "gemini_api_configured": bool(_GEMINI_API_KEY),
+    }
+
+
+@router.post(
+    "/retrain-from-fleet",
+    summary="[DEMO] Generate a LoRA-style training summary from fleet data",
+    description=(
+        "Aggregates all fleet fault-tree entries and asks Gemini to produce a "
+        "consolidated diagnostic knowledge summary — a conceptual stand-in for the "
+        "periodic LoRA adapter fine-tune described in ARCHITECTURE.md §4.4. "
+        "In production this would trigger a Vertex AI fine-tuning job."
+    ),
+)
+async def retrain_from_fleet(store: FleetKnowledgeStore = Depends(get_store)) -> dict:
+    entries = store.list_entries()
+    if not entries:
+        raise HTTPException(status_code=400, detail="No fleet entries to retrain from.")
+
+    # Summarise into a condensed prompt
+    entry_summaries = "\n".join(
+        f"- fault_id={e.fault_id}, symptoms={e.symptoms}, "
+        f"hypotheses={[h.name for h in e.hypotheses]}"
+        for e in entries[:30]  # cap to avoid token overflow
+    )
+    prompt = (
+        "You are a field-service AI trainer. Below are fault-tree entries collected from "
+        "a fleet of devices. Produce a concise JSON object summarising key patterns:\n"
+        "{\n"
+        '  "common_faults": [...],\n'
+        '  "top_diagnostic_steps": [...],\n'
+        '  "recommended_training_topics": [...],\n'
+        '  "lora_adapter_description": "<one sentence>"\n'
+        "}\n\n"
+        f"Fleet data:\n{entry_summaries}\n\n"
+        "Return ONLY the JSON object."
+    )
+
+    try:
+        raw = await _gemini_generate(prompt)
+        summary = json.loads(_extract_json(raw))
+    except Exception as exc:
+        logger.exception("retrain-from-fleet: failed")
+        raise HTTPException(status_code=502, detail=f"Gemini error: {exc}") from exc
+
+    return {
+        "status": "training_summary_generated",
+        "entries_used": len(entries),
+        "summary": summary,
+    }
