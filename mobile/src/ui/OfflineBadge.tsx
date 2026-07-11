@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import NetInfo, {NetInfoState} from '@react-native-community/netinfo';
 import {StyleSheet, Text, View} from 'react-native';
+import {colors, radius, spacing, typography} from './theme';
 
 export const OfflineBadge: React.FC = () => {
   const [online, setOnline] = useState(true);
@@ -12,16 +13,37 @@ export const OfflineBadge: React.FC = () => {
     return () => unsub();
   }, []);
 
+  const dotColor = online ? colors.online : colors.offline;
+
   return (
-    <View style={[styles.badge, online ? styles.online : styles.offline]}>
+    <View style={styles.badge}>
+      <View style={[styles.dot, {backgroundColor: dotColor}]} />
       <Text style={styles.text}>{online ? 'ONLINE' : 'OFFLINE'}</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  badge: {alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12},
-  online: {backgroundColor: '#1b7f3a'},
-  offline: {backgroundColor: '#8a1c1c'},
-  text: {color: '#fff', fontSize: 11, fontWeight: '600'},
+  badge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: radius.pill,
+    marginRight: spacing.xs,
+  },
+  text: {
+    ...typography.micro,
+    color: colors.textPrimary,
+    textTransform: 'uppercase',
+  },
 });
