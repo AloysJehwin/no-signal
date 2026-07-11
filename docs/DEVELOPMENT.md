@@ -11,11 +11,14 @@
 | Python | 3.11+ | 3.12 also fine |
 | Gemini API key | — | For Research Agent — free tier is enough |
 
-Set the Gemini key in `cloud/.env` (copy from `cloud/.env.example`):
+Set credentials in `cloud/secrets.json` (copy from `cloud/secrets.json.example` — this file is gitignored):
+```bash
+cp cloud/secrets.json.example cloud/secrets.json
+# edit cloud/secrets.json and fill in all values
 ```
-GEMINI_API_KEY=...
-GOOGLE_SEARCH_API_KEY=...
-```
+
+See [`docs/TRAINING_API.md`](TRAINING_API.md) for the full credentials reference,
+deployment commands, and training API docs.
 
 ## Mobile (`mobile/`)
 
