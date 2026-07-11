@@ -4,6 +4,7 @@ export interface SymptomInput {
   equipmentType: EquipmentType;
   symptomRaw: string;
   photoUri?: string;
+  audioUri?: string;
   capturedAt: string;
 }
 
