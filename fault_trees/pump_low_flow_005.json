@@ -1,0 +1,36 @@
+{
+  "fault_id": "pump_low_flow_005",
+  "equipment_type": "irrigation_pump",
+  "symptoms": [
+    "low flow at outlet",
+    "reduced discharge pressure",
+    "sprinklers not reaching",
+    "pump runs but underdelivers",
+    "pressure gauge below normal",
+    "flow slowly declining over time"
+  ],
+  "hypotheses": [
+    {
+      "name": "clogged_strainer",
+      "diagnostic_step": "Isolate power and close any downstream valves. Remove the suction strainer (foot-valve basket or inline Y-strainer on the suction side) and inspect the mesh against a light. If a suction-side vacuum gauge is fitted, compare its reading at rated flow to baseline before removal.",
+      "expected_result": "Mesh is at least 80 percent open with no matted algae, silt cake, or weed debris. Suction vacuum reading should be within 2 inHg (about 7 kPa) of the commissioning baseline for the same flow condition. A vacuum reading 5 inHg or more above baseline strongly indicates upstream restriction.",
+      "if_confirmed": "Clean the strainer thoroughly with a soft brush and clean water; do not use wire brushes on stainless mesh. Replace the mesh if torn or permanently deformed. Consider fitting a coarser pre-strainer if debris load is high, and shorten the cleaning interval.",
+      "if_ruled_out": "Suction path is clear and unrestricted. Move to impeller_damage hypothesis."
+    },
+    {
+      "name": "impeller_damage",
+      "diagnostic_step": "Lock out power. Drain and open the pump casing. Inspect the impeller for cracked, chipped, or eroded vanes, particularly at the leading and trailing edges. Measure the vane-to-volute (cutwater) clearance with a feeler gauge, and check the wear ring gap.",
+      "expected_result": "Vanes are intact and symmetric with no missing material. Cutwater clearance and wear-ring gap are within the manufacturer's tolerance, typically 0.3-0.5 mm for centrifugal irrigation pumps. No pitting from cavitation and no rope/fibre wrap around the eye.",
+      "if_confirmed": "Replace the impeller and matching wear ring as a set. Balance-check the replacement impeller if the pump runs above 2000 rpm. Renew the mechanical seal while the pump is open, refill, prime, and verify flow against the pump curve.",
+      "if_ruled_out": "Impeller and internals are serviceable. Move to discharge_valve_partial hypothesis."
+    },
+    {
+      "name": "discharge_valve_partial",
+      "diagnostic_step": "With the pump running at normal speed, walk the discharge line and confirm every isolation valve, non-return valve, and pressure-relief valve is in the position it should be. Compare discharge pressure at the pump outlet gauge to the pump curve for the actual measured flow (bucket-and-stopwatch or flow meter).",
+      "expected_result": "All isolation valves fully open (handle aligned with pipe run for gate/ball valves). Non-return valve clapper swings freely when tapped. Measured discharge pressure sits on the pump's published curve for the measured flow, within about 10 percent.",
+      "if_confirmed": "Open the throttled valve fully, or repair/replace the seized non-return valve. If a pressure-relief valve is dumping, re-set it above the operating pressure per manufacturer instructions. Re-measure flow and pressure to confirm they return to the curve.",
+      "if_ruled_out": "Discharge path is fully open and matches the pump curve. Escalate: check for a partially closed impeller-eye obstruction, worn casing, low motor RPM (measure with tachometer), or suction-side cavitation from excessive lift (defer to expert)."
+    }
+  ],
+  "safety_flags": []
+}

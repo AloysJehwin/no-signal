@@ -1,0 +1,36 @@
+{
+  "fault_id": "genset_no_start_001",
+  "equipment_type": "diesel_genset",
+  "symptoms": [
+    "won't start",
+    "engine won't crank",
+    "clicking sound",
+    "no crank",
+    "starter clicks but engine does not turn",
+    "engine cranks slowly"
+  ],
+  "hypotheses": [
+    {
+      "name": "weak_battery",
+      "diagnostic_step": "With the key off, place a DC multimeter across the battery terminals (red to +, black to -). Then attempt to crank for 3-5 seconds while an assistant reads the meter.",
+      "expected_result": "Resting voltage 12.4V or higher; voltage under crank stays above 9.6V. Anything below indicates a weak or discharged battery.",
+      "if_confirmed": "Charge the battery for 4-6 hours at 10A or replace if it will not hold above 12.2V after charging. Clean and re-torque terminals to 6-8 Nm.",
+      "if_ruled_out": "Battery is healthy. Move to starter_motor_failure hypothesis."
+    },
+    {
+      "name": "starter_motor_failure",
+      "diagnostic_step": "With battery confirmed good, bridge the starter solenoid's small trigger terminal to the large battery-positive lug with an insulated screwdriver (engine in neutral, fuel off). Listen and observe.",
+      "expected_result": "Starter should spin the engine vigorously. A single loud click with no rotation, or a grinding/whirring with no engagement, indicates solenoid or starter motor failure.",
+      "if_confirmed": "Remove and bench-test the starter. Replace the starter motor or rebuild solenoid contacts. Inspect ring gear for missing teeth before reinstall.",
+      "if_ruled_out": "Starter engages and spins freely. Move to fuel_starvation hypothesis."
+    },
+    {
+      "name": "fuel_starvation",
+      "diagnostic_step": "Check fuel level in tank. Open the bleed screw on the secondary fuel filter housing and operate the hand primer pump 15-20 strokes. Observe fuel flow.",
+      "expected_result": "Clean, bubble-free diesel should flow steadily from the bleed screw within 10-15 strokes. Air, foam, or no fuel indicates starvation (empty tank, clogged filter, air leak on suction side, or failed lift pump).",
+      "if_confirmed": "Replace primary and secondary fuel filters. Inspect suction-side hoses and clamps for cracks. Bleed the injection system fully before re-cranking.",
+      "if_ruled_out": "Fuel delivery is healthy. Escalate: check compression, glow plugs, and injection pump timing (defer to expert per DEFER path)."
+    }
+  ],
+  "safety_flags": []
+}

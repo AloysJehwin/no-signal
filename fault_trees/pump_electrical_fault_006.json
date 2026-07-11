@@ -1,0 +1,43 @@
+{
+  "fault_id": "pump_electrical_fault_006",
+  "equipment_type": "irrigation_pump",
+  "symptoms": [
+    "pump won't start",
+    "motor hums but does not turn",
+    "breaker trips on start",
+    "no response when switched on",
+    "motor trips overload",
+    "loud buzzing at motor",
+    "burning insulation smell"
+  ],
+  "hypotheses": [
+    {
+      "name": "tripped_breaker",
+      "diagnostic_step": "Lock out at the isolator. Open the local distribution board and visually inspect the pump's circuit breaker and any thermal overload relay in the motor starter. Reset any tripped device once, then measure line voltage at the incoming terminals with a multimeter set to AC volts.",
+      "expected_result": "Breaker holds in the ON position without immediately re-tripping. Line-to-line voltage is within plus/minus 5 percent of nameplate (e.g., 400V 3-phase should read 380-420V; 230V single-phase should read 218-242V). All three phases balanced to within 2 percent for 3-phase systems.",
+      "if_confirmed": "Investigate the root cause of the trip before returning to service. Check overload setting matches motor FLA on the nameplate. If breaker still holds and pump runs, monitor starting current with a clamp meter — inrush should settle within 3-5 seconds. Do not repeatedly reset a tripping breaker.",
+      "if_ruled_out": "Supply is present and breaker holds but motor still will not run correctly. Move to capacitor_failed hypothesis."
+    },
+    {
+      "name": "capacitor_failed",
+      "diagnostic_step": "For single-phase motors only. Isolate power, wait 5 minutes, then safely discharge the capacitor across a 10 kOhm resistor before touching terminals. Disconnect the leads and measure capacitance with a multimeter's capacitance range. Compare to the value stamped on the capacitor (typical start capacitors 50-200 uF, run capacitors 5-50 uF).",
+      "expected_result": "Measured capacitance within plus/minus 10 percent of the labelled value. Casing is not swollen, cracked, or leaking oily fluid. No signs of scorching on the terminals.",
+      "if_confirmed": "Replace with an identical capacitor (same uF, same voltage rating or higher, same start-vs-run type). Ensure it is mounted securely away from heat sources. Restore power and confirm the motor accelerates to full speed within 2 seconds without humming.",
+      "if_ruled_out": "Capacitor is within spec (or motor is 3-phase and has none). Move to motor_winding_burnt hypothesis."
+    },
+    {
+      "name": "motor_winding_burnt",
+      "diagnostic_step": "Lock out and tag out power at the isolator. Disconnect the motor leads from the starter. Using a multimeter, measure the resistance between each pair of motor leads (U-V, V-W, U-W for 3-phase; run-common and start-common for single-phase). Then measure insulation resistance from each lead to the motor frame with a 500V insulation tester (megger).",
+      "expected_result": "Winding resistance readings are balanced within 5 percent of each other for 3-phase motors, and match the manufacturer's data sheet to within about 10 percent. Insulation resistance to earth is at least 1 MOhm (ideally 10 MOhm or more) at 500V. No visible scorch marks, no burnt-varnish smell from the terminal box.",
+      "if_confirmed": "The motor is faulty. Remove it and send for professional rewind, or replace with an identical-rating motor. Investigate why it failed (single-phasing, chronic overload, moisture ingress, blocked cooling) before installing the replacement or it will fail again.",
+      "if_ruled_out": "Windings and insulation are healthy. Escalate: check the motor contactor coil, auxiliary contacts, and control-circuit wiring; also verify the shaft turns freely by hand (defer to a qualified electrician)."
+    }
+  ],
+  "safety_flags": [
+    "sparking",
+    "burning insulation smell",
+    "smoke from motor",
+    "exposed live conductor",
+    "water contacting energised equipment"
+  ]
+}
