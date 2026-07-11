@@ -1,0 +1,36 @@
+{
+  "fault_id": "pump_no_prime_004",
+  "equipment_type": "irrigation_pump",
+  "symptoms": [
+    "pump won't prime",
+    "no water at outlet",
+    "pump runs dry",
+    "loss of prime after stopping",
+    "pump loses suction",
+    "air bubbles at delivery"
+  ],
+  "hypotheses": [
+    {
+      "name": "air_leak_suction",
+      "diagnostic_step": "With the pump stopped, fill the priming port until water overflows and close it. Start the pump for no more than 60 seconds while an observer walks the entire suction line from foot valve to pump inlet, inspecting every joint, union, and the suction-side gauge. Optionally, apply soapy water to joints and watch for bubbles being drawn in (they will bubble outward when the pump stops).",
+      "expected_result": "Suction gauge should draw down to a steady 5-8 inHg (about 17-27 kPa) of vacuum for a lift under 5 m. All joints stay dry and firm. No hissing, no gauge fluctuation, no bubbles at delivery within 60 seconds of priming water being introduced.",
+      "if_confirmed": "Tighten or remake the leaking joint with fresh PTFE tape or thread sealant rated for suction service. Replace any cracked suction hose. Ensure all clamps are of the correct diameter and double-clamp on flexible hose. Re-prime and re-test.",
+      "if_ruled_out": "Suction line is airtight. Move to foot_valve_stuck hypothesis."
+    },
+    {
+      "name": "foot_valve_stuck",
+      "diagnostic_step": "Stop and isolate the pump. Lift the suction line out of the sump/well far enough to visually inspect the foot valve. Manually push the valve poppet/flap open and release it; observe return. If retrieval is impractical, fill the priming chamber, start the pump for 30 seconds, stop, and time how long prime is retained.",
+      "expected_result": "Foot valve poppet moves freely and snaps closed under its own weight or spring, with a clean seat and no visible debris. Screen is clear. When primed and stopped, the pump should retain prime for at least 5 minutes with no back-drain.",
+      "if_confirmed": "Clean debris (leaves, silt, weeds) from the strainer basket. If the seat is scored or the flap is warped/perished, replace the foot valve. Re-install with the strainer at least 300 mm above the sump floor to avoid drawing silt.",
+      "if_ruled_out": "Foot valve holds and seals correctly. Move to impeller_worn hypothesis."
+    },
+    {
+      "name": "impeller_worn",
+      "diagnostic_step": "Isolate power. Remove the pump volute/casing cover and inspect the impeller and wear ring. Measure the axial clearance between the impeller vanes and the volute wall with a feeler gauge, and check impeller vane edges for erosion, chips, or missing material.",
+      "expected_result": "Impeller vanes are sharp and intact. Wear-ring clearance is within manufacturer spec, typically 0.3-0.5 mm for centrifugal irrigation pumps. No visible cavitation pitting on the vane leading edges.",
+      "if_confirmed": "Replace the impeller and wear ring as a set. Check the shaft for straightness (dial-indicate to within 0.05 mm TIR) and replace the mechanical seal while the pump is open. Re-assemble to torque spec and re-prime.",
+      "if_ruled_out": "Impeller is serviceable. Escalate: verify suction lift is within pump's NPSH capability, check mechanical seal for air ingress on the shaft side, and inspect casing for hairline cracks (defer to expert)."
+    }
+  ],
+  "safety_flags": []
+}
