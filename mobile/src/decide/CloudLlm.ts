@@ -8,9 +8,9 @@ const GEMINI_ENDPOINT =
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // If we're offline this call would otherwise hang for the OS default (~30s+).
-// Bail after 15s so a photo/audio diagnosis fails fast and the caller can
-// surface a clean error.
-const CLOUD_DECIDE_TIMEOUT_MS = 15000;
+// Give a generous window for slow mobile networks with images/audio attached
+// but still bail before the user gives up.
+const CLOUD_DECIDE_TIMEOUT_MS = 30000;
 
 const getKey = (): string | undefined => {
   const extra = Constants.expoConfig?.extra as {geminiApiKey?: string} | undefined;
