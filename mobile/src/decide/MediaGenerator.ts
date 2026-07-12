@@ -14,9 +14,9 @@ const TTS_ENDPOINT =
   `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent`;
 
 // Timeouts per media type. Nano Banana image gen takes ~8-12s under
-// concurrent load; TTS is faster.
-const IMAGE_TIMEOUT_MS = 18000;
-const TTS_TIMEOUT_MS = 12000;
+// concurrent load; TTS is faster. Extra headroom for flaky mobile networks.
+const IMAGE_TIMEOUT_MS = 35000;
+const TTS_TIMEOUT_MS = 20000;
 const cacheDir = `${FileSystem.cacheDirectory}media/`;
 
 const fetchWithTimeout = async (
